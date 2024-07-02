@@ -1,32 +1,19 @@
-// "StAuth10244: I Marmik Gelani, 000884216 certify that this material is my original work. 
-// No other person's work has been used without due acknowledgement. 
-// I have not made my work available to anyone else."
-
-// backend/server.js
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
-const redis = require('redis');
 
 const app = express();
 const port = 3000;
 
+
 app.use(cors());
 app.use(bodyParser.json());
 
-const client = redis.createClient({
-  host: '127.0.0.1',
-  port: 6379
-});
-client.connect();
+// In-memory scores object
+const scores = {};
 
-client.on('error', (err) => {
-  console.log('Redis error: ', err);
-});
-
+// ... (keep your existing database setup code)
 const db = new sqlite3.Database(':memory:', (err) => {
   if (err) {
     return console.error(err.message);
@@ -71,46 +58,32 @@ app.post('/login', (req, res) => {
   });
 });
 
-app.post('/update', async (req, res) => {
+app.post('/update', (req, res) => {
   const { username, result } = req.body;
+  console.log(`Received update request for user: ${username}, result: ${result}`);
 
-  try {
-    if (result === "correct") {
-      await client.lPush("correctAnswers", username);
-      await client.lTrim("correctAnswers", -10, -1);
-    }
+  if (result === "correct") {
+    // Increment score for the user
+    scores[username] = (scores[username] || 0) + 1;
+    
+    // Create leaderboard with scores
+    const leaderboard = Object.entries(scores)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([username, score]) => ({ username, score }));
 
-    const leaders = await client.lRange("correctAnswers", -10, -1);
+    console.log('Current scores:', scores);
+    console.log('Leaderboard:', leaderboard);
 
-    res.json({ leaders });
-  } catch (err) {
-    console.error('Error updating/retrieving leaderboard:', err);
-    res.status(500).send('Error interacting with the leaderboard');
-  }
-});
-
-
-
-app.post('/updateLeaderboard', async (req, res) => {
-  const { username, result } = req.body;
-
-  if (result === 'correct') {
-    await client.zIncrBy('leaderboard', 1, username);
-    try {
-      const leaders = await client.zRange('leaderboard', 0, 9, 'WITHSCORES');
-
-      const formattedLeaders = [];
-      for (let i = 0; i < leaders.length; i += 2) {
-        formattedLeaders.push({ username: leaders[i], score: parseInt(leaders[i + 1]) });
-      }
-
-      res.json({ status: 'success', leaderboard: formattedLeaders });
-    } catch (err) {
-      console.error('Error retrieving leaderboard:', err);
-      res.json({ status: 'failure', message: 'Error retrieving leaderboard' });
-    }
+    res.json({ status: 'success', leaders: leaderboard });
   } else {
-    res.json({ status: 'failure', message: 'Only correct answers update the leaderboard' });
+    // For incorrect answers, return current leaderboard without updating
+    const leaderboard = Object.entries(scores)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([username, score]) => ({ username, score }));
+
+    res.json({ status: 'success', message: 'Incorrect answer', leaders: leaderboard });
   }
 });
 

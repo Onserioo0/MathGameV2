@@ -1,7 +1,3 @@
-// "StAuth10244: I Marmik Gelani, 000884216 certify that this material is my original work. 
-// No other person's work has been used without due acknowledgement. 
-// I have not made my work available to anyone else."
-
 // frontend/MathGameScreen.js
 
 import React, { useState, useContext } from 'react';
@@ -12,12 +8,12 @@ const MathGameScreen = ({ navigation, route }) => {
   const [number1, setNumber1] = useState(Math.floor(Math.random() * 100) + 1);
   const [number2, setNumber2] = useState(Math.floor(Math.random() * 100) + 1);
   const [answer, setAnswer] = useState('');
-  const username = route.params.username; 
+  const username = route.params.username;
+
   const checkAnswer = async () => {
     const correct = parseInt(answer) === number1 + number2;
     const result = correct ? 'correct' : 'incorrect';
-
-
+  
     try {
       const response = await fetch('http://localhost:3000/update', {
         method: 'POST',
@@ -26,21 +22,23 @@ const MathGameScreen = ({ navigation, route }) => {
         },
         body: JSON.stringify({ username, result }),
       });
-      const data = await response.json();
-
-      if (response.ok) {
-        navigation.navigate('GameResult', {
-          result: correct ? 'correct' : 'incorrect',
-          leaderboard: data.leaders,
-          username
-        });
-      } else {
-        Alert.alert('Error', 'There was an issue updating the leaderboard.');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const data = await response.json();
+  
+      navigation.navigate('GameResult', {
+        result: result,
+        leaderboard: data.leaders || [],
+        username
+      });
     } catch (error) {
       console.error('Failed to update leaderboard', error);
+      Alert.alert('Error', 'There was a problem connecting to the server. Please try again.');
     }
-
+  
     setAnswer('');
     setNumber1(Math.floor(Math.random() * 100) + 1);
     setNumber2(Math.floor(Math.random() * 100) + 1);
